@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#c6603f">
@@ -38,7 +38,7 @@
   .banner.spectate { background: #e8f0fb; color: #2b4f80; border-color: #c7d8f2; }
   .banner .big { font-size: 20px; vertical-align: middle; }
 
-  main { flex: 1; padding: 12px 10px calc(env(safe-area-inset-bottom) + 118px); touch-action: none; }
+  main { flex: 1; padding: 12px 10px calc(env(safe-area-inset-bottom) + 118px); touch-action: pinch-zoom; }
   .board { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0 10px; max-width: 760px; margin: 0 auto; align-items: start; }
   .board.readonly { opacity: .85; filter: saturate(.7); }
   .col { display: flex; flex-direction: column; gap: 12px; }
@@ -60,7 +60,7 @@
   .belt::before, .belt::after { content:""; position:absolute; left:0; right:0; height: 18px; z-index: 3; pointer-events: none; }
   .belt::before { top: 0; background: linear-gradient(#3a2f28, transparent); }
   .belt::after { bottom: 0; background: linear-gradient(transparent, #3a2f28); }
-  .bitem { position: absolute; left: 50%; width: calc(var(--item-size) * 1.25); height: calc(var(--item-size) * 1.25); margin-left: calc(var(--item-size) * -0.625); border-radius: 8px; background: var(--slot); box-shadow: 0 2px 0 #c9b393; display: flex; align-items: center; justify-content: center; font-size: var(--item-size); will-change: transform; touch-action: none; }
+  .bitem { position: absolute; left: 50%; width: calc(var(--item-size) * 1.25); height: calc(var(--item-size) * 1.25); margin-left: calc(var(--item-size) * -0.625); border-radius: 8px; background: var(--slot); box-shadow: 0 2px 0 #c9b393; display: flex; align-items: center; justify-content: center; font-size: var(--item-size); will-change: transform; touch-action: pinch-zoom; }
   .bitem.mine, .bitem.wanted { z-index: 4; }
   .belt.done { background: var(--belt-dark); }
   .belt .empty-msg { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#c9b393; font-size: 12px; writing-mode: vertical-rl; letter-spacing:.15em; font-weight:700; opacity:.7; }
@@ -458,6 +458,10 @@ function refFromEl(el) {
   return null;
 }
 function onPointerDown(ev) {
+  if (!ev.isPrimary) { // second finger: this is a pinch, not a move — drop any drag and let the browser have it
+    if (app.drag) { const d = app.drag; app.drag = null; $("#drag").style.display = "none"; document.querySelectorAll(".slot.dragging").forEach(e => e.classList.remove("dragging")); app.store.tx(st => txSelect(st, app.pid, d.ref, false)); }
+    return;
+  }
   const s = app.state; if (!s || s.phase !== "play" || ev.button > 0 || spectating() || app.needSheet) return;
   const ref = refFromEl(ev.target); if (ref === null) return;
   const pid = app.pid, board = s.boards[pid];
@@ -474,7 +478,7 @@ function onPointerDown(ev) {
   }
 }
 function onPointerMove(ev) {
-  const d = app.drag; if (!d) return;
+  const d = app.drag; if (!d || !ev.isPrimary) return;
   if (!d.moved && Math.hypot(ev.clientX - d.x, ev.clientY - d.y) > 8) {
     d.moved = true; const g = $("#drag"); g.textContent = ITEMS[d.item]; g.style.display = "block";
     document.querySelectorAll(".slot").forEach(e => { if (+e.dataset.ref === d.ref) e.classList.add("dragging"); });
@@ -486,7 +490,7 @@ function onPointerMove(ev) {
   }
 }
 function onPointerUp(ev) {
-  const d = app.drag; if (!d) return; app.drag = null;
+  const d = app.drag; if (!d || !ev.isPrimary) return; app.drag = null;
   $("#drag").style.display = "none";
   document.querySelectorAll(".slot.dragging").forEach(e => e.classList.remove("dragging"));
   const ch = $(".chute"); if (ch) ch.classList.remove("hot");
@@ -504,6 +508,7 @@ document.addEventListener("pointerdown", onPointerDown, { passive: false });
 document.addEventListener("pointermove", onPointerMove);
 document.addEventListener("pointerup", onPointerUp);
 document.addEventListener("pointercancel", onPointerUp);
+document.addEventListener("touchend", ev => { if (ev.touches.length === 0 && ev.changedTouches.length === 1 && refFromEl(ev.target) !== null) ev.preventDefault(); }, { passive: false });
 
 // Types I'm holding a pair of (and no third), i.e. what I'd sensibly ask for.
 function myPairs() {
