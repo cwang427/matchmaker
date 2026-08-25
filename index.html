@@ -563,15 +563,14 @@ function viewNameForm(kind) {
 }
 async function submitName(kind) {
   const name = ($("#name").value || "").trim(); if (!name) { $("#name").focus(); return; }
+  // read the code BEFORE switching screens — render() replaces the form
+  const code = ($("#code") ? $("#code").value : roomFromURL()).toUpperCase().replace(/[^A-Z]/g, "");
+  if (kind === "join" && code.length !== 4) { app.err = "Codes are 4 letters."; render(); return; }
   localStorage.setItem("matchmaker:name", name);
   app.err = ""; app.screen = "loading"; render();
   try {
     if (kind === "create") await createRoom(name);
-    else {
-      const code = ($("#code") ? $("#code").value : roomFromURL()).toUpperCase().replace(/[^A-Z]/g, "");
-      if (code.length !== 4) { app.err = "Codes are 4 letters."; app.screen = "join"; render(); return; }
-      await joinRoom(code, name);
-    }
+    else await joinRoom(code, name);
   } catch (e) { console.error(e); app.err = "Couldn't connect to Firebase: " + (e && e.message ? e.message : e) + ". Check config.js and your database rules."; app.screen = kind; render(); }
 }
 function remainingTriples(s) { const all = [...s.boards.p1.shelves.flat(), ...s.boards.p1.belt, ...s.boards.p2.shelves.flat(), ...s.boards.p2.belt]; return all.filter(Boolean).length / 3; }
