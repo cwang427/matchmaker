@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#c6603f">
+<title>MatchMaker</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧺</text></svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23c6603f'/><text x='50' y='68' text-anchor='middle' font-size='56'>🧺</text></svg>">
+<style>
+  :root {
+    --bg: #fbf3e6; --ink: #3b2a20; --muted: #8a6f5e;
+    --accent: #c6603f; --accent-deep: #9c4527;
+    --wood: #d9a86c; --wood-dark: #b9843f; --wood-shadow: #8f6229;
+    --slot: #f5e6cf; --card: #ffffff;
+    --p1: #4d8fd6; --p2: #e0679a; --ok: #4caf7d; --gold: #f2b134;
+    --belt: #6b5a4e; --belt-dark: #4a3d34;
+    --item-size: clamp(20px, min(6vw, 4.2vh), 60px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: -apple-system, "SF Pro Rounded", "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--ink); overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
+  #app { min-height: 100dvh; display: flex; flex-direction: column; }
+
+  header { background: var(--accent); color: #fff; padding: calc(env(safe-area-inset-top) + 8px) 12px 8px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 8px; box-shadow: 0 2px 0 var(--accent-deep); position: sticky; top: 0; z-index: 5; }
+  header .players { flex-basis: 100%; justify-content: center; }
+  header .pill { background: rgba(0,0,0,.18); border-radius: 999px; padding: 5px 10px; font-weight: 700; font-size: 13px; white-space: nowrap; }
+  header .players { display: flex; gap: 8px; align-items: center; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; display: inline-block; margin-right: 4px; }
+  .dot.on { background: #7dffb3; box-shadow: 0 0 6px #7dffb3; }
+  .tag { padding: 3px 10px; border-radius: 999px; font-weight: 700; font-size: 13px; color: #fff; white-space: nowrap; }
+  .tag.p1 { background: var(--p1); } .tag.p2 { background: var(--p2); }
+  .tag.me { outline: 2px solid #fff; }
+
+  .banner { background: #fff3c4; color: #6b4d12; font-weight: 700; font-size: 14px; text-align: center; padding: 8px 12px; border-bottom: 1px solid #f0d9a8; }
+  .banner.spectate { background: #e8f0fb; color: #2b4f80; border-color: #c7d8f2; }
+  .banner .big { font-size: 20px; vertical-align: middle; }
+
+  main { flex: 1; padding: 12px 10px calc(env(safe-area-inset-bottom) + 118px); touch-action: none; }
+  .board { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0 10px; max-width: 760px; margin: 0 auto; align-items: start; }
+  .board.readonly { opacity: .85; filter: saturate(.7); }
+  .col { display: flex; flex-direction: column; gap: 12px; }
+
+  .shelf { background: linear-gradient(#e6b878, var(--wood)); border-radius: 9px; padding: 7px 5px 5px; box-shadow: 0 4px 0 var(--wood-dark), 0 7px 0 var(--wood-shadow); display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .shelf.cleared { animation: shelfPop .5s ease-out; }
+  @keyframes shelfPop { 0%{transform:scale(1)} 40%{transform:scale(1.06)} 100%{transform:scale(1)} }
+  .slot { aspect-ratio: 1 / 1.08; border-radius: 7px; background: var(--slot); box-shadow: inset 0 3px 6px rgba(0,0,0,.18); display: flex; align-items: center; justify-content: center; font-size: var(--item-size); position: relative; transition: transform .12s ease; }
+  .slot.empty.target { box-shadow: inset 0 0 0 3px rgba(76,175,125,.65), inset 0 3px 6px rgba(0,0,0,.18); }
+  .slot.mine, .bitem.mine { transform: translateY(-5px) scale(1.1); box-shadow: 0 0 0 3px var(--p1), 0 6px 10px rgba(0,0,0,.25); z-index: 2; }
+  .slot.dragging .item, .bitem.dragging { opacity: .25; }
+  .slot.wanted, .bitem.wanted { box-shadow: 0 0 0 3px var(--gold), 0 0 14px var(--gold); animation: glow 1.2s ease-in-out infinite alternate; }
+  @keyframes glow { from { box-shadow: 0 0 0 3px var(--gold), 0 0 6px var(--gold) } to { box-shadow: 0 0 0 3px var(--gold), 0 0 18px var(--gold) } }
+  .item { filter: drop-shadow(0 2px 1px rgba(0,0,0,.2)); pointer-events: none; line-height: 1; }
+  .ghost { position: absolute; inset: 0; display:flex; align-items:center; justify-content:center; font-size: var(--item-size); animation: poof .55s ease-out forwards; pointer-events:none; }
+  @keyframes poof { 0%{transform:scale(1);opacity:1} 100%{transform:scale(1.9) translateY(-14px);opacity:0} }
+
+  .belt { width: calc(var(--item-size) * 1.6); border-radius: 12px; position: relative; overflow: hidden; background: repeating-linear-gradient(180deg, var(--belt) 0 14px, var(--belt-dark) 14px 18px); box-shadow: inset 0 0 0 3px #3a2f28, inset 0 0 12px rgba(0,0,0,.5); }
+  .belt::before, .belt::after { content:""; position:absolute; left:0; right:0; height: 18px; z-index: 3; pointer-events: none; }
+  .belt::before { top: 0; background: linear-gradient(#3a2f28, transparent); }
+  .belt::after { bottom: 0; background: linear-gradient(transparent, #3a2f28); }
+  .bitem { position: absolute; left: 50%; width: calc(var(--item-size) * 1.25); height: calc(var(--item-size) * 1.25); margin-left: calc(var(--item-size) * -0.625); border-radius: 8px; background: var(--slot); box-shadow: 0 2px 0 #c9b393; display: flex; align-items: center; justify-content: center; font-size: var(--item-size); will-change: transform; touch-action: none; }
+  .bitem.mine, .bitem.wanted { z-index: 4; }
+  .belt.done { background: var(--belt-dark); }
+  .belt .empty-msg { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#c9b393; font-size: 12px; writing-mode: vertical-rl; letter-spacing:.15em; font-weight:700; opacity:.7; }
+
+  #drag { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 50; font-size: calc(var(--item-size) * 1.2); transform: translate(-50%, -60%); filter: drop-shadow(0 8px 10px rgba(0,0,0,.35)); display: none; }
+
+  .toolbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; background: rgba(251,243,230,.94); backdrop-filter: blur(8px); border-top: 1px solid rgba(0,0,0,.08); padding: 8px 12px calc(env(safe-area-inset-bottom) + 8px); display: flex; flex-direction: column; gap: 8px; }
+  .toolbar .row2 { display: flex; gap: 8px; align-items: center; }
+  .toolbar .hint { flex: 1; font-size: 12px; color: var(--muted); min-height: 2.6em; display: flex; align-items: center; }
+  .chute { border: 3px dashed var(--p2); border-radius: 14px; padding: 10px; text-align: center; font-weight: 800; color: var(--p2); background: #fff; font-size: 15px; transition: background .15s, transform .15s; }
+  .chute.p1 { border-color: var(--p1); color: var(--p1); }
+  .chute.armed { background: #fde7ef; transform: scale(1.02); }
+  .chute.p1.armed { background: #e6f0fb; }
+  .chute.hot { background: var(--p2); color: #fff; }
+  .chute.p1.hot { background: var(--p1); color: #fff; }
+
+  .toast { position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 64px); transform: translateX(-50%); background: #3b2a20; color: #fff; padding: 10px 16px; border-radius: 999px; font-weight: 700; z-index: 40; box-shadow: 0 8px 20px rgba(0,0,0,.3); animation: toastin .25s ease-out; white-space: nowrap; }
+  @keyframes toastin { from { transform: translate(-50%, -12px); opacity: 0 } to { transform: translate(-50%, 0); opacity: 1 } }
+
+  button { font: inherit; font-weight: 700; border: 0; border-radius: 14px; cursor: pointer; padding: 12px 18px; background: var(--accent); color: #fff; box-shadow: 0 3px 0 var(--accent-deep); font-size: 15px; }
+  button:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--accent-deep); }
+  button.ghostbtn { background: #fff; color: var(--ink); box-shadow: 0 3px 0 #d8c8b2; }
+  button.small { padding: 8px 12px; font-size: 13px; border-radius: 10px; }
+  button:disabled { opacity: .45; pointer-events: none; }
+  button.wide { width: 100%; }
+  .seg { display: flex; gap: 6px; margin: 8px 0 4px; }
+  .seg button { flex: 1; padding: 10px 6px; font-size: 14px; }
+  .seg button.off { background: #fff; color: var(--ink); box-shadow: 0 3px 0 #d8c8b2; }
+  .needgrid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 14px 0; }
+  .needgrid button { font-size: 34px; padding: 10px 14px; background: var(--slot); box-shadow: 0 3px 0 #dcc6a3; border-radius: 14px; }
+
+  .overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; background: rgba(59,42,32,.55); backdrop-filter: blur(3px); padding: 18px; }
+  .sheet { background: var(--card); border-radius: 22px; padding: 22px 20px calc(18px + env(safe-area-inset-bottom)); width: 100%; max-width: 440px; box-shadow: 0 20px 50px rgba(0,0,0,.3); animation: rise .25s ease-out; max-height: 92dvh; overflow: auto; }
+  @keyframes rise { from { transform: translateY(24px); opacity: 0 } to { transform: none; opacity: 1 } }
+  .sheet h2 { margin: 0 0 6px; font-size: 22px; }
+  .sheet p.sub { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+  .sheet label.lbl2 { display:block; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; margin-top: 14px; }
+  .qcard { display: block; width: 100%; text-align: left; background: var(--slot); color: var(--ink); border-radius: 14px; padding: 14px 16px; margin: 10px 0; font-weight: 600; font-size: 16px; line-height: 1.35; box-shadow: 0 3px 0 #dcc6a3; }
+  .qcard.both { background: #fde7ef; box-shadow: 0 3px 0 #ecbfd1; }
+  .qcard.picked { outline: 3px solid var(--ok); background: #e8f6ee; }
+  .badge { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 800; padding: 3px 8px; border-radius: 999px; background: var(--ok); color: #fff; }
+  .sheet a { color: var(--accent); font-weight: 700; }
+  .qcard .lbl { display:block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; font-weight: 700; }
+  .bigq { font-size: 22px; line-height: 1.35; font-weight: 700; margin: 12px 0 20px; }
+  .who { display:flex; align-items:center; gap:8px; font-size: 14px; color: var(--muted); margin-bottom: 8px; flex-wrap: wrap; }
+  .row { display: flex; gap: 10px; margin-top: 14px; } .row > * { flex: 1; }
+  input[type=text] { font: inherit; font-size: 17px; width: 100%; padding: 12px 14px; border-radius: 12px; border: 2px solid #e5d5bf; background: #fff; color: var(--ink); outline: none; }
+  input[type=text]:focus { border-color: var(--accent); }
+  .code { font-size: 40px; letter-spacing: .22em; font-weight: 800; text-align: center; margin: 10px 0 4px; color: var(--accent); }
+  .center { text-align: center; }
+  .notice { background: #fff7e8; border: 1px solid #f0d9a8; border-radius: 12px; padding: 10px 12px; font-size: 13px; color: #6b4d12; margin-top: 12px; }
+  .spinner { display:inline-block; width: 14px; height: 14px; border: 2px solid #ccc; border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg) } }
+  .logo { font-size: 54px; text-align: center; margin-bottom: 4px; }
+  h1 { text-align: center; margin: 0 0 4px; font-size: 28px; }
+  .tiny { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="drag"></div>
+<div id="toasts"></div>
+
+<script src="questions.js"></script>
+<script src="config.js"></script>
+<script>
+/* =====================================================================
+   MatchMaker v3 — each player sorts their own shelves, but every triple
+   is split across the two boards: the owner holds two copies, the
+   partner holds the third and has to send it over. Every N combined
+   matches, the game pauses for a question.
+   ===================================================================== */
+
+const ITEMS = ["", "🍓","🍩","☕","🥑","🍕","🌮","🍪","🍉","🥐","🍒","🍋","🫐","🍦","🧁","🥨","🍇","🍞","🥞","🍫","🥕","🌽","🍯","🥝","🍑"];
+
+// typesPer: item types each player OWNS (holds 2 of). Total types = 2*typesPer. Each board holds 3*typesPer items.
+// shelves: per board. onBelt: how many of that board's items start on its belt.
+const LEVELS = {
+  1: { typesPer: 6,  shelves: 8,  onBelt: 12, tier: 1, label: "Warm-up" },
+  2: { typesPer: 8,  shelves: 10, onBelt: 16, tier: 2, label: "Going deeper" },
+  3: { typesPer: 10, shelves: 12, onBelt: 20, tier: 3, label: "All the way" },
+};
+const BELT_PERIOD = 2800, BELT_WINDOW = 5;
+const PASSES_PER_LEVEL = 2, OPTIONS_PER_PICK = 3, DEFAULT_EVERY = 4;
+const BELT_BASE = 1000, CHUTE = 9999;
+// Display names. Used as-is in single-device mode, and pre-filled in the name boxes for two-phone mode (host = P1).
+const NAMES = { p1: "⚽ Mr. Soccerboy", p2: "🪑 Ms. Chairgirl" };
+
+const $ = (sel) => document.querySelector(sel);
+const rand = (n) => Math.floor(Math.random() * n);
+const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = rand(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const esc = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const other = (p) => p === "p1" ? "p2" : "p1";
+const isBeltRef = (r) => r >= BELT_BASE && r < CHUTE;
+const hasTriple = (r) => r[0] !== 0 && r[0] === r[1] && r[1] === r[2];
+const boardEmpty = (b) => b.shelves.every(r => r[0] === 0 && r[1] === 0 && r[2] === 0) && b.belt.length === 0;
+
+// ---------- Board generation ----------
+function makeBoards(level, now) {
+  const cfg = LEVELS[level];
+  const types = shuffle(Array.from({ length: 2 * cfg.typesPer }, (_, i) => i + 1));
+  const owner = {}; types.forEach((t, i) => owner[t] = i % 2 === 0 ? "p1" : "p2");
+  const boards = {};
+  for (const pid of ["p1", "p2"]) {
+    const pool = [];
+    for (const t of types) { if (owner[t] === pid) pool.push(t, t); else pool.push(t); }
+    shuffle(pool);
+    const belt = pool.slice(0, cfg.onBelt);
+    const rest = pool.slice(cfg.onBelt);
+    while (rest.length < cfg.shelves * 3) rest.push(0);
+    for (let attempt = 0; attempt < 100; attempt++) {
+      shuffle(rest);
+      const shelves = [];
+      for (let s = 0; s < cfg.shelves; s++) shelves.push(rest.slice(s * 3, s * 3 + 3));
+      if (!shelves.some(hasTriple)) { boards[pid] = { shelves, belt, beltStart: now }; break; }
+    }
+  }
+  return boards;
+}
+function shuffleShelves(shelves) {
+  const pool = shelves.flat();
+  for (let attempt = 0; attempt < 200; attempt++) {
+    shuffle(pool);
+    const out = []; for (let s = 0; s < shelves.length; s++) out.push(pool.slice(s * 3, s * 3 + 3));
+    if (!out.some(hasTriple)) return out;
+  }
+  return shelves;
+}
+
+// ---------- Questions ----------
+// `used` holds answered + tossed questions (gone for the session). Recycled ones simply stay eligible,
+// with a one-hand cooldown so a card you just recycled doesn't come straight back.
+function drawOptions(state) {
+  const tier = LEVELS[state.level].tier, used = state.used || {};
+  const cooling = new Set([...(state.lastHand || []), ...((state.q && state.q.options) || [])]);
+  const pool = (t, cool) => QUESTIONS.map((q, i) => ({ q, i })).filter(x => x.q.tier === t && !used["q" + x.i] && (!cool || !cooling.has(x.i)));
+  const build = (cool) => {
+    let c = pool(tier, cool);
+    for (let t = tier - 1; t >= 1 && c.length < OPTIONS_PER_PICK; t--) c = c.concat(pool(t, cool));
+    for (let t = tier + 1; t <= 3 && c.length < OPTIONS_PER_PICK; t++) c = c.concat(pool(t, cool));
+    return c;
+  };
+  let candidates = build(true);
+  if (candidates.length < OPTIONS_PER_PICK) candidates = build(false);
+  if (candidates.length < OPTIONS_PER_PICK) candidates = QUESTIONS.map((q, i) => ({ q, i }));
+  shuffle(candidates);
+  const picked = []; let bothCount = 0;
+  for (const c of candidates) { if (c.q.both) { if (bothCount >= 1) continue; bothCount++; } picked.push(c.i); if (picked.length === OPTIONS_PER_PICK) break; }
+  return picked;
+}
+
+// ---------- Pure state transitions (return null to abort) ----------
+function initialState(hostName) {
+  return {
+    v: 3, phase: "lobby", level: 1, every: DEFAULT_EVERY,
+    players: { p1: { name: hostName }, p2: { name: "" } },
+    boards: { p1: { shelves: [], belt: [], beltStart: 0 }, p2: { shelves: [], belt: [], beltStart: 0 } },
+    sel: { p1: -1, p2: -1 }, need: { p1: 0, p2: 0 },
+    turn: 0, q: { answerer: "p1", options: [], chosen: -1 },
+    used: {}, passes: { p1: PASSES_PER_LEVEL, p2: PASSES_PER_LEVEL },
+    matches: 0, totalMatches: 0, levelClear: false, createdAt: Date.now(),
+  };
+}
+const cloneBoards = (b) => ({ p1: { shelves: b.p1.shelves.map(r => r.slice()), belt: b.p1.belt.slice(), beltStart: b.p1.beltStart },
+                              p2: { shelves: b.p2.shelves.map(r => r.slice()), belt: b.p2.belt.slice(), beltStart: b.p2.beltStart } });
+function txJoin(state, name) { if (!state || state.players.p2.name) return null; return { ...state, players: { ...state.players, p2: { name } } }; }
+function txSetEvery(state, n) { if (!state || state.phase !== "lobby") return null; return { ...state, every: n }; }
+function txStart(state, level, now) {
+  return { ...state, phase: "play", level, boards: makeBoards(level, now), sel: { p1: -1, p2: -1 }, need: { p1: 0, p2: 0 },
+    passes: { p1: PASSES_PER_LEVEL, p2: PASSES_PER_LEVEL }, matches: 0, levelClear: false };
+}
+function itemAt(board, ref) {
+  if (isBeltRef(ref)) return board.belt[ref - BELT_BASE] || 0;
+  return board.shelves[Math.floor(ref / 3)][ref % 3];
+}
+function txSelect(state, pid, ref, on) {
+  if (!state || state.phase !== "play") return null;
+  if (on && !itemAt(state.boards[pid], ref)) return null;
+  return { ...state, sel: { ...state.sel, [pid]: on ? ref : -1 } };
+}
+// Takes an item off pid's board (shelf or belt). Returns [boards, item] or null.
+function takeItem(boards, pid, from, expectItem) {
+  const b = boards[pid]; let item;
+  if (isBeltRef(from)) { const i = from - BELT_BASE; item = b.belt[i]; if (!item || (expectItem && item !== expectItem)) return null; b.belt.splice(i, 1); }
+  else { const fs = Math.floor(from / 3), fi = from % 3; item = b.shelves[fs][fi]; if (!item) return null; b.shelves[fs][fi] = 0; }
+  return item;
+}
+function afterMatch(state, next, pid, ts, item) {
+  const b = next.boards[pid];
+  b.shelves[ts] = [0, 0, 0];
+  next.matches = (state.matches || 0) + 1;
+  next.totalMatches = (state.totalMatches || 0) + 1;
+  next.lastCleared = { pid, shelf: ts, item, at: Date.now() };
+  next.levelClear = boardEmpty(next.boards.p1) && boardEmpty(next.boards.p2);
+  next.sel = { ...next.sel, [pid]: -1 };
+  const every = state.every || DEFAULT_EVERY;
+  if (next.matches % every === 0 || next.levelClear) {
+    next.phase = "pick";
+    next.q = { answerer: next.turn % 2 === 0 ? "p1" : "p2", options: drawOptions(next), chosen: -1 };
+  }
+  return next;
+}
+function txMove(state, pid, from, to, expectItem) {
+  if (!state || state.phase !== "play") return null;
+  const boards = cloneBoards(state.boards), b = boards[pid];
+  const ts = Math.floor(to / 3), ti = to % 3;
+  if (b.shelves[ts][ti] !== 0) return null;
+  if (!isBeltRef(from) && Math.floor(from / 3) === ts) return null;
+  const item = takeItem(boards, pid, from, expectItem); if (!item) return null;
+  b.shelves[ts][ti] = item;
+  const next = { ...state, boards, sel: { ...state.sel, [pid]: -1 } };
+  if (hasTriple(b.shelves[ts])) return afterMatch(state, next, pid, ts, item);
+  return next;
+}
+function txSend(state, pid, from, expectItem) {
+  if (!state || state.phase !== "play") return null;
+  const boards = cloneBoards(state.boards);
+  const item = takeItem(boards, pid, from, expectItem); if (!item) return null;
+  const to = other(pid);
+  boards[to].belt.push(item);
+  const need = { ...state.need }; if (need[to] === item) need[to] = 0;
+  return { ...state, boards, need, sel: { ...state.sel, [pid]: -1 }, lastSend: { from: pid, to, item, at: Date.now() } };
+}
+function txNeed(state, pid, item) { if (!state || state.phase !== "play") return null; return { ...state, need: { ...state.need, [pid]: state.need[pid] === item ? 0 : item } }; }
+// The answerer sorts the hand: one to answer (used), one to recycle (stays in the pool), one to toss (used, never shown again).
+function txPick(state, pid, answer, recycle, toss) {
+  if (!state || state.phase !== "pick" || state.q.answerer !== pid) return null;
+  const opts = state.q.options || [];
+  if (![answer, recycle, toss].every(i => opts.includes(i)) || new Set([answer, recycle, toss]).size !== 3) return null;
+  const used = { ...(state.used || {}), ["q" + answer]: true, ["q" + toss]: true };
+  return { ...state, phase: "answer", used, lastHand: opts.slice(), tossed: (state.tossed || 0) + 1,
+    q: { ...state.q, chosen: answer, recycled: recycle, tossedQ: toss } };
+}
+function txPass(state, pid) {
+  if (!state || state.phase !== "pick" || state.q.answerer !== pid) return null;
+  if ((state.passes || {})[pid] <= 0) return null;
+  // a pass recycles the whole hand: nothing is burned, the three just go back in the pool (with a cooldown)
+  const tmp = { ...state, lastHand: (state.q.options || []).slice() };
+  return { ...tmp, passes: { ...state.passes, [pid]: state.passes[pid] - 1 }, q: { ...state.q, options: drawOptions(tmp) } };
+}
+function txDone(state) {
+  if (!state || state.phase !== "answer") return null;
+  const turn = (state.turn || 0) + 1;
+  if (state.levelClear) return { ...state, turn, phase: state.level >= 3 ? "finished" : "levelDone" };
+  return { ...state, turn, phase: "play" };
+}
+function txNextLevel(state, now) { if (!state || state.phase !== "levelDone") return null; return txStart(state, state.level + 1, now); }
+function txShuffle(state, pid) { if (!state || state.phase !== "play") return null; const boards = cloneBoards(state.boards); boards[pid].shelves = shuffleShelves(boards[pid].shelves); return { ...state, boards, sel: { ...state.sel, [pid]: -1 } }; }
+function txRestart(state, now) { const s = initialState(state.players.p1.name); s.players.p2 = state.players.p2; s.every = state.every; return txStart(s, 1, now); }
+
+// ---------- Store ----------
+function makeLocalStore() {
+  let state = null; const subs = [];
+  return { mode: "demo", timeOffset: 0,
+    tx(fn) { const n = fn(state); if (n) { state = n; subs.forEach(cb => cb(state)); } return Promise.resolve(!!n); },
+    subscribe(cb) { subs.push(cb); if (state) cb(state); }, presence() {}, online() { return true; }, get() { return state; } };
+}
+function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => rej(new Error("could not load " + src)); document.head.appendChild(s); }); }
+async function makeFirebaseStore(code) {
+  await loadScript("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js");
+  await loadScript("https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js");
+  if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+  const db = firebase.database(), ref = db.ref("rooms/" + code);
+  const subs = []; let state = null; const presence = { p1: false, p2: false };
+  const store = { mode: "online", timeOffset: 0 };
+  db.ref(".info/serverTimeOffset").on("value", s => { store.timeOffset = s.val() || 0; });
+  const normBoard = (b) => ({ shelves: ((b && b.shelves) || []).map(r => [r[0] || 0, r[1] || 0, r[2] || 0]), belt: (b && b.belt) || [], beltStart: (b && b.beltStart) || 0 });
+  const norm = (s) => {
+    if (!s) return s;
+    s.boards = { p1: normBoard(s.boards && s.boards.p1), p2: normBoard(s.boards && s.boards.p2) };
+    s.sel = s.sel || { p1: -1, p2: -1 }; s.need = s.need || { p1: 0, p2: 0 }; s.used = s.used || {};
+    s.q = s.q || { answerer: "p1", options: [], chosen: -1 }; s.q.options = s.q.options || [];
+    s.players = s.players || {}; s.players.p1 = s.players.p1 || { name: "" }; s.players.p2 = s.players.p2 || { name: "" };
+    s.players.p1.name = s.players.p1.name || ""; s.players.p2.name = s.players.p2.name || "";
+    s.every = s.every || DEFAULT_EVERY;
+    return s;
+  };
+  ref.child("state").on("value", snap => { state = norm(snap.val()); subs.forEach(cb => cb(state)); });
+  ref.child("presence").on("value", snap => { Object.assign(presence, { p1: false, p2: false }, snap.val() || {}); subs.forEach(cb => cb(state)); });
+  Object.assign(store, {
+    async tx(fn) { const r = await ref.child("state").transaction(cur => { const n = fn(norm(cur)); return n === null ? undefined : n; }); return r.committed; },
+    subscribe(cb) { subs.push(cb); if (state) cb(state); },
+    first() { return ref.child("state").once("value").then(snap => norm(snap.val())); },
+    presence(pid) { const me = ref.child("presence/" + pid); db.ref(".info/connected").on("value", s => { if (s.val()) { me.onDisconnect().remove(); me.set(true); } }); },
+    online(pid) { return !!presence[pid]; }, get() { return state; },
+  });
+  return store;
+}
+
+// ---------- App ----------
+const app = { draft: null, store: null, code: null, pid: null, state: null, clearedAnim: null, screen: "home", err: "", drag: null, needSheet: false, seenSend: 0, seenNeed: { p1: 0, p2: 0 } };
+const now = () => Date.now() + (app.store ? app.store.timeOffset : 0);
+function roomFromURL() { return (new URLSearchParams(location.search).get("room") || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4); }
+function genCode() { const A = "ABCDEFGHJKLMNPQRSTUVWXYZ"; let c = ""; for (let i = 0; i < 4; i++) c += A[rand(A.length)]; return c; }
+function roomLink(code) { const u = new URL(location.href); u.search = "?room=" + code; return u.toString(); }
+
+async function createRoom(name) {
+  const code = genCode();
+  app.store = await makeFirebaseStore(code);
+  await app.store.tx(() => initialState(name));
+  app.code = code; app.pid = "p1"; localStorage.setItem("matchmaker:" + code, "p1");
+  history.replaceState(null, "", "?room=" + code); attach();
+}
+async function joinRoom(code, name) {
+  app.store = await makeFirebaseStore(code);
+  const first = await app.store.first();
+  if (!first) { app.err = "That room doesn't exist (or has expired). Double-check the code."; app.screen = "join"; render(); return; }
+  const remembered = localStorage.getItem("matchmaker:" + code);
+  if (remembered === "p1" || (remembered === "p2" && first.players.p2.name)) app.pid = remembered;
+  else if (!first.players.p2.name) {
+    const ok = await app.store.tx(s => txJoin(s, name));
+    if (!ok) { app.err = "Someone already joined this room."; app.screen = "join"; render(); return; }
+    app.pid = "p2"; localStorage.setItem("matchmaker:" + code, "p2");
+  } else { app.err = "This room already has two players."; app.screen = "join"; render(); return; }
+  app.code = code; history.replaceState(null, "", "?room=" + code); attach();
+}
+function startDemo() {
+  app.store = makeLocalStore(); app.pid = "p1"; app.code = "DEMO";
+  app.store.tx(() => { const s = initialState(NAMES.p1); s.players.p2.name = NAMES.p2; return txStart(s, 1, now()); });
+  attach();
+}
+function attach() {
+  app.store.presence(app.pid);
+  app.store.subscribe(s => {
+    if (!s) return;
+    const prev = app.state;
+    if (prev && s.lastCleared && (!prev.lastCleared || s.lastCleared.at !== prev.lastCleared.at)) {
+      app.clearedAnim = s.lastCleared; setTimeout(() => { app.clearedAnim = null; render(); }, 600);
+    }
+    if (s.lastSend && s.lastSend.at !== app.seenSend) {
+      app.seenSend = s.lastSend.at;
+      if (prev && s.lastSend.to === app.pid) toast(`${ITEMS[s.lastSend.item]} from ${nameOfState(s, s.lastSend.from)}`);
+    }
+    const partner = other(app.pid);
+    if (prev && s.need[partner] && s.need[partner] !== prev.need[partner]) toast(`${nameOfState(s, partner)} needs ${ITEMS[s.need[partner]]}`);
+    app.state = s; app.screen = "game"; render();
+  });
+  startBeltLoop();
+}
+function toast(text) {
+  const t = document.createElement("div"); t.className = "toast"; t.textContent = text; $("#toasts").appendChild(t);
+  setTimeout(() => t.remove(), 2600);
+}
+function nameOfState(s, pid) { const n = s.players[pid].name; return n || NAMES[pid]; }
+function nameOf(pid) { return nameOfState(app.state, pid); }
+function me() { return app.store.mode === "demo" && app.state && (app.state.phase === "pick" || app.state.phase === "answer") ? app.state.q.answerer : app.pid; }
+function myBoard() { return app.state.boards[app.pid]; }
+// When your board is done you watch your partner's board instead.
+function spectating() { return app.state.phase === "play" && boardEmpty(myBoard()) && !boardEmpty(app.state.boards[other(app.pid)]); }
+function viewPid() { return spectating() ? other(app.pid) : app.pid; }
+
+// ---------- Belt geometry ----------
+// The belt is a ring of R positions (at least window+2, so it keeps rolling even with 1–2 items;
+// unused positions travel round as gaps). Returns the visible window: [{i, item, y}] with item 0 = gap.
+function beltLayout(items, beltStart, t) {
+  const n = items.length; if (n === 0) return [];
+  const R = Math.max(n, BELT_WINDOW + 2);
+  const el = Math.max(0, t - beltStart) / BELT_PERIOD, offset = Math.floor(el), frac = el - offset;
+  const out = [];
+  for (let j = 0; j <= BELT_WINDOW; j++) { const i = ((R - (offset % R)) + j) % R; out.push({ i, item: i < n ? items[i] : 0, y: j + frac - 1 }); }
+  return out;
+}
+let beltLoopStarted = false;
+function startBeltLoop() {
+  if (beltLoopStarted) return; beltLoopStarted = true;
+  const tick = () => {
+    const beltEl = document.getElementById("belt");
+    if (app.state && app.screen === "game" && beltEl) {
+      const pid = viewPid(), board = app.state.boards[pid];
+      const h = beltEl.clientHeight / BELT_WINDOW, lay = beltLayout(board.belt, board.beltStart, now());
+      const els = beltEl.querySelectorAll(".bitem"), wanted = app.state.need[other(pid)];
+      for (let k = 0; k < els.length; k++) {
+        const e = els[k], L = lay[k];
+        if (!L || !L.item) { e.style.display = "none"; e.dataset.i = -1; continue; }
+        e.style.display = "";
+        e.style.transform = `translateY(${L.y * h + (h - e.offsetHeight) / 2}px)`;
+        if (e.dataset.i != L.i || e.dataset.item != L.item) { e.dataset.i = L.i; e.dataset.item = L.item; e.textContent = ITEMS[L.item]; }
+        const ref = BELT_BASE + L.i;
+        e.classList.toggle("mine", pid === app.pid && app.state.sel[pid] === ref);
+        e.classList.toggle("dragging", !!(app.drag && app.drag.ref === ref));
+        e.classList.toggle("wanted", wanted === L.item);
+      }
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+// ---------- Interaction ----------
+function refFromEl(el) {
+  if (!el || !el.closest) return null;
+  const slot = el.closest(".slot"); if (slot) return +slot.dataset.ref;
+  const bi = el.closest(".bitem"); if (bi) return BELT_BASE + (+bi.dataset.i);
+  if (el.closest(".chute")) return CHUTE;
+  return null;
+}
+function onPointerDown(ev) {
+  const s = app.state; if (!s || s.phase !== "play" || ev.button > 0 || spectating() || app.needSheet) return;
+  const ref = refFromEl(ev.target); if (ref === null) return;
+  const pid = app.pid, board = s.boards[pid];
+  if (ref === CHUTE) { const from = s.sel[pid]; if (from >= 0) app.store.tx(st => txSend(st, pid, from, itemAt(board, from))); return; }
+  const item = itemAt(board, ref);
+  if (item) {
+    const wasSelected = s.sel[pid] === ref;
+    app.drag = { ref, item, x: ev.clientX, y: ev.clientY, moved: false, wasSelected };
+    if (!wasSelected) app.store.tx(st => txSelect(st, pid, ref, true));
+    ev.preventDefault();
+  } else if (s.sel[pid] >= 0) {
+    const from = s.sel[pid];
+    app.store.tx(st => txMove(st, pid, from, ref, itemAt(board, from)));
+  }
+}
+function onPointerMove(ev) {
+  const d = app.drag; if (!d) return;
+  if (!d.moved && Math.hypot(ev.clientX - d.x, ev.clientY - d.y) > 8) {
+    d.moved = true; const g = $("#drag"); g.textContent = ITEMS[d.item]; g.style.display = "block";
+    document.querySelectorAll(".slot").forEach(e => { if (+e.dataset.ref === d.ref) e.classList.add("dragging"); });
+  }
+  if (d.moved) {
+    const g = $("#drag"); g.style.left = ev.clientX + "px"; g.style.top = ev.clientY + "px";
+    const under = document.elementFromPoint(ev.clientX, ev.clientY); const ch = $(".chute");
+    if (ch) ch.classList.toggle("hot", !!(under && under.closest && under.closest(".toolbar")));
+  }
+}
+function onPointerUp(ev) {
+  const d = app.drag; if (!d) return; app.drag = null;
+  $("#drag").style.display = "none";
+  document.querySelectorAll(".slot.dragging").forEach(e => e.classList.remove("dragging"));
+  const ch = $(".chute"); if (ch) ch.classList.remove("hot");
+  const pid = app.pid;
+  if (d.moved) {
+    const under = document.elementFromPoint(ev.clientX, ev.clientY);
+    let ref = refFromEl(under);
+    if (ref === null && under && under.closest && under.closest(".toolbar")) ref = CHUTE; // anywhere on the bottom bar counts as the chute when dropping
+    if (ref === CHUTE) app.store.tx(st => txSend(st, pid, d.ref, d.item));
+    else if (ref !== null && !isBeltRef(ref) && itemAt(app.state.boards[pid], ref) === 0) app.store.tx(st => txMove(st, pid, d.ref, ref, d.item));
+    else app.store.tx(st => txSelect(st, pid, d.ref, false));
+  } else if (d.wasSelected) app.store.tx(st => txSelect(st, pid, d.ref, false));
+}
+document.addEventListener("pointerdown", onPointerDown, { passive: false });
+document.addEventListener("pointermove", onPointerMove);
+document.addEventListener("pointerup", onPointerUp);
+document.addEventListener("pointercancel", onPointerUp);
+
+// Types I'm holding a pair of (and no third), i.e. what I'd sensibly ask for.
+function myPairs() {
+  const b = myBoard(), counts = {};
+  [...b.shelves.flat(), ...b.belt].forEach(t => { if (t) counts[t] = (counts[t] || 0) + 1; });
+  return Object.keys(counts).filter(t => counts[t] === 2).map(Number);
+}
+function draftTap(i) {
+  const s = app.state, hand = s.q.options.join(",");
+  const d = app.draft && app.draft.hand === hand ? app.draft : { hand, answer: null };
+  if (d.answer === null) { d.answer = i; app.draft = d; render(); return; }
+  if (i === d.answer) { app.draft = null; render(); return; } // tap the answer again to undo
+  const toss = s.q.options.find(x => x !== d.answer && x !== i);
+  app.draft = null;
+  app.store.tx(st => txPick(st, st.q.answerer, d.answer, i, toss));
+}
+function switchSeat() { app.pid = other(app.pid); app.needSheet = false; render(); }
+
+// ---------- Rendering ----------
+function render() {
+  const root = $("#app");
+  if (app.screen === "home") return root.innerHTML = viewHome();
+  if (app.screen === "create") return root.innerHTML = viewNameForm("create");
+  if (app.screen === "join") return root.innerHTML = viewNameForm("join");
+  if (app.screen === "loading") return root.innerHTML = `<div class="overlay"><div class="sheet center"><span class="spinner"></span> Connecting…</div></div>`;
+  if (!app.state) return;
+  root.innerHTML = viewHeader() + viewBanner() + viewBoard() + viewToolbar() + viewOverlay();
+  const cols = root.querySelectorAll(".col");
+  if (cols.length) { const h = Math.max(cols[0].offsetHeight, cols[1].offsetHeight); const b = root.querySelector(".belt"); if (b) b.style.height = h + "px"; }
+}
+function viewHome() {
+  const online = !!window.FIREBASE_CONFIG;
+  return `<div class="overlay" style="background:var(--bg)"><div class="sheet">
+    <div class="logo">🧺</div><h1>MatchMaker</h1>
+    <p class="sub center">Sort your shelves. Send what you don't need. Every few matches, a question.</p>
+    ${online ? `
+      <button class="wide" onclick="app.screen='create';render()">Create a room</button><div style="height:10px"></div>
+      <button class="wide ghostbtn" onclick="app.screen='join';render()">Join with a code</button><div style="height:10px"></div>
+      <button class="wide ghostbtn small" onclick="startDemo()">Practice alone (no sync)</button>
+    ` : `
+      <button class="wide" onclick="startDemo()">Play on this device</button>
+      <div class="notice">Two-phone mode is off because <b>config.js</b> has no Firebase config yet. See README for the 5-minute setup. On this device you can switch seats to play both sides.</div>
+    `}
+    <p class="tiny center" style="margin-top:16px">Tip: in Safari, Share → “Add to Home Screen” for full-screen play.</p>
+  </div></div>`;
+}
+function viewNameForm(kind) {
+  const code = roomFromURL();
+  return `<div class="overlay" style="background:var(--bg)"><div class="sheet">
+    <h2>${kind === "create" ? "Create a room" : "Join a room"}</h2>
+    <p class="sub">${kind === "create" ? "You'll get a code to send her." : "Enter the code from the link you were sent."}</p>
+    ${kind === "join" ? `<input type="text" id="code" placeholder="Room code" maxlength="4" autocapitalize="characters" autocomplete="off" value="${esc(code)}" style="text-transform:uppercase;letter-spacing:.2em;text-align:center;font-weight:800;margin-bottom:10px">` : ""}
+    <input type="text" id="name" placeholder="Your name" maxlength="16" autocomplete="off" value="${esc(localStorage.getItem("matchmaker:name") || (kind === "create" ? NAMES.p1 : NAMES.p2))}">
+    ${app.err ? `<div class="notice">${esc(app.err)}</div>` : ""}
+    <div class="row"><button class="ghostbtn" onclick="app.err='';app.screen='home';render()">Back</button><button onclick="submitName('${kind}')">${kind === "create" ? "Create" : "Join"}</button></div>
+  </div></div>`;
+}
+async function submitName(kind) {
+  const name = ($("#name").value || "").trim(); if (!name) { $("#name").focus(); return; }
+  localStorage.setItem("matchmaker:name", name);
+  app.err = ""; app.screen = "loading"; render();
+  try {
+    if (kind === "create") await createRoom(name);
+    else {
+      const code = ($("#code") ? $("#code").value : roomFromURL()).toUpperCase().replace(/[^A-Z]/g, "");
+      if (code.length !== 4) { app.err = "Codes are 4 letters."; app.screen = "join"; render(); return; }
+      await joinRoom(code, name);
+    }
+  } catch (e) { console.error(e); app.err = "Couldn't connect to Firebase: " + (e && e.message ? e.message : e) + ". Check config.js and your database rules."; app.screen = kind; render(); }
+}
+function remainingTriples(s) { const all = [...s.boards.p1.shelves.flat(), ...s.boards.p1.belt, ...s.boards.p2.shelves.flat(), ...s.boards.p2.belt]; return all.filter(Boolean).length / 3; }
+function viewHeader() {
+  const s = app.state, cfg = LEVELS[s.level];
+  const on = (pid) => app.store.mode === "online" ? `<span class="dot ${app.store.online(pid) ? "on" : ""}"></span>` : "";
+  const every = s.every || DEFAULT_EVERY, untilQ = every - (s.matches % every);
+  return `<header>
+    <span class="pill">Lv ${s.level} · ${cfg.label}</span>
+    <span class="pill" title="matches until the next question">${remainingTriples(s)} left · ❓ in ${untilQ}</span>
+    <span class="players"><span class="tag p1 ${app.pid === "p1" ? "me" : ""}">${on("p1")}${esc(nameOf("p1"))}</span><span class="tag p2 ${app.pid === "p2" ? "me" : ""}">${on("p2")}${esc(nameOf("p2"))}</span></span>
+  </header>`;
+}
+function viewBanner() {
+  const s = app.state; if (s.phase !== "play") return "";
+  if (spectating()) return `<div class="banner spectate">Your shelves are clear 🎉 Watching ${esc(nameOf(other(app.pid)))}'s board.</div>`;
+  const partner = other(app.pid);
+  if (s.need[partner]) return `<div class="banner"><span class="big">${ITEMS[s.need[partner]]}</span> ${esc(nameOf(partner))} needs one of these — send it if you have it.</div>`;
+  if (s.need[app.pid]) return `<div class="banner">You asked ${esc(nameOf(partner))} for <span class="big">${ITEMS[s.need[app.pid]]}</span></div>`;
+  return "";
+}
+function viewBoard() {
+  const s = app.state, pid = viewPid(), board = s.boards[pid];
+  if (!board.shelves.length) return `<main></main>`;
+  const ro = pid !== app.pid, mySel = ro ? -1 : s.sel[pid], wanted = s.need[other(pid)];
+  const half = Math.ceil(board.shelves.length / 2);
+  const shelfHtml = (si) => {
+    const row = board.shelves[si];
+    const clearedHere = app.clearedAnim && app.clearedAnim.pid === pid && app.clearedAnim.shelf === si;
+    return `<div class="shelf ${clearedHere ? "cleared" : ""}">` + row.map((it, i) => {
+      const ref = si * 3 + i;
+      const cls = ["slot", it ? "" : "empty", ref === mySel ? "mine" : "", (it && it === wanted) ? "wanted" : "",
+        (!it && mySel >= 0 && (isBeltRef(mySel) || Math.floor(mySel / 3) !== si)) ? "target" : ""].join(" ");
+      const ghost = clearedHere && !it ? `<span class="ghost">${ITEMS[app.clearedAnim.item]}</span>` : "";
+      return `<div class="${cls}" data-ref="${ref}"><span class="item">${it ? ITEMS[it] : ""}</span>${ghost}</div>`;
+    }).join("") + `</div>`;
+  };
+  const col = (from, to) => `<div class="col">${Array.from({ length: to - from }, (_, k) => shelfHtml(from + k)).join("")}</div>`;
+  const n = board.belt.length;
+  const belt = `<div class="belt ${n ? "" : "done"}" id="belt">${n ? Array.from({ length: BELT_WINDOW + 1 }, () => `<div class="bitem" data-i="-1"></div>`).join("") : `<div class="empty-msg">EMPTY</div>`}</div>`;
+  return `<main><div class="board ${ro ? "readonly" : ""}">${col(0, half)}${belt}${col(half, board.shelves.length)}</div></main>`;
+}
+function viewToolbar() {
+  const s = app.state, pid = app.pid, partner = other(pid), playing = s.phase === "play" && !spectating();
+  const holding = playing && s.sel[pid] >= 0;
+  const hint = !playing ? "" : (holding ? "Drop on an empty spot, or send it." : "Keep your pairs. Send the singles.");
+  return `<div class="toolbar">
+    <div class="chute ${partner} ${holding ? "armed" : ""}" ${playing ? "" : 'style="opacity:.4"'}>${holding ? `Send ${ITEMS[itemAt(s.boards[pid], s.sel[pid])]} to ${esc(nameOf(partner))} →` : `Drop here to send to ${esc(nameOf(partner))} →`}</div>
+    <div class="row2"><span class="hint">${hint}</span>
+      ${app.store.mode === "demo" ? `<button class="ghostbtn small" onclick="switchSeat()">⇄ Switch seat</button>` : ""}
+      <button class="ghostbtn small" onclick="app.needSheet=true;render()" ${playing ? "" : "disabled"}>📣 I need…</button>
+      <button class="ghostbtn small" onclick="app.store.tx(st=>txShuffle(st,'${pid}'))" ${playing ? "" : "disabled"}>🔀</button>
+      ${app.store.mode === "online" ? `<button class="ghostbtn small" onclick="share()">📤</button>` : ""}
+    </div></div>`;
+}
+function viewOverlay() {
+  const s = app.state, meId = me();
+  if (app.needSheet && s.phase === "play") {
+    const pairs = myPairs(), partner = other(app.pid);
+    return `<div class="overlay" onclick="if(event.target===this){app.needSheet=false;render()}"><div class="sheet center">
+      <h2>Ask ${esc(nameOf(partner))} for…</h2>
+      <p class="sub">${pairs.length ? "These are the items you hold two of. Tap one and it'll light up on her screen." : "You don't have any pairs waiting on a third right now."}</p>
+      <div class="needgrid">${pairs.map(t => `<button onclick="app.needSheet=false;app.store.tx(st=>txNeed(st,'${app.pid}',${t}))" ${s.need[app.pid] === t ? 'style="outline:3px solid var(--gold)"' : ""}>${ITEMS[t]}</button>`).join("")}</div>
+      <div class="row">${s.need[app.pid] ? `<button class="ghostbtn" onclick="app.needSheet=false;app.store.tx(st=>txNeed(st,'${app.pid}',${s.need[app.pid]}))">Clear request</button>` : ""}<button class="ghostbtn" onclick="app.needSheet=false;render()">Close</button></div>
+    </div></div>`;
+  }
+  if (s.phase === "lobby") {
+    const link = roomLink(app.code), every = s.every || DEFAULT_EVERY;
+    if (app.pid === "p1") return `<div class="overlay"><div class="sheet center">
+      <h2>Your room</h2><p class="sub">Send this code or the link to ${esc(NAMES.p2)}.</p>
+      <div class="code">${app.code}</div><p class="tiny" style="word-break:break-all">${esc(link)}</p>
+      <div class="row"><button class="ghostbtn" onclick="share()">Share link</button><button class="ghostbtn" onclick="copyLink()">Copy</button></div>
+      <label class="lbl2">A question every…</label>
+      <div class="seg">${[3, 4, 5].map(n => `<button class="${every === n ? "" : "off"}" onclick="app.store.tx(st=>txSetEvery(st,${n}))">${n} matches</button>`).join("")}</div>
+      <p class="tiny">≈ ${Math.ceil(12 / every) + Math.ceil(16 / every) + Math.ceil(20 / every)} questions over three levels (48 matches total)</p>
+      <div style="margin:14px 0 6px">${s.players.p2.name ? `<b>${esc(s.players.p2.name)}</b> is here 🎉` : `<span class="spinner"></span>Waiting for ${esc(NAMES.p2)} to join…`}</div>
+      <button class="wide" ${s.players.p2.name ? "" : "disabled"} onclick="app.store.tx(st=>txStart(st,1,now()))">Start</button></div></div>`;
+    return `<div class="overlay"><div class="sheet center"><h2>You're in!</h2><p class="sub"><span class="spinner"></span>Waiting for ${esc(nameOf("p1"))} to start…</p></div></div>`;
+  }
+  if (s.phase === "pick") {
+    const ans = s.q.answerer, ask = other(ans), isMe = meId === ans;
+    const d = app.draft && app.draft.hand === s.q.options.join(",") ? app.draft : { hand: s.q.options.join(","), answer: null };
+    const badge = (i) => d.answer === i ? `<span class="badge ans">✅ Answer</span>` : "";
+    const cards = s.q.options.map(i => { const q = QUESTIONS[i];
+      return `<button class="qcard ${q.both ? "both" : ""} ${d.answer === i ? "picked" : ""}" ${isMe ? `onclick="draftTap(${i})"` : "disabled"}><span class="lbl">${q.both ? "You both answer" : "Question"}</span>${esc(q.text)}${badge(i)}</button>`; }).join("");
+    const step = !isMe ? `${esc(nameOf(ans))} is choosing…` : (d.answer === null ? "Pick the one you'll answer" : "Which one comes back later?");
+    const sub = !isMe ? "" : (d.answer === null ? `<p class="sub">Then choose one to keep for later — the last one gets tossed for good.</p>` : `<p class="sub">The one you don't pick is tossed for the rest of tonight. <a href="#" onclick="app.draft=null;render();return false">Start over</a></p>`);
+    return `<div class="overlay"><div class="sheet">
+      <div class="who">✨ ${s.matches} matches! <span class="tag ${ans}">${esc(nameOf(ans))}</span> answers · <span class="tag ${ask}">${esc(nameOf(ask))}</span> asks</div>
+      <h2>${step}</h2>${sub}${cards}
+      ${isMe && d.answer === null ? `<button class="ghostbtn small wide" style="margin-top:8px" ${s.passes[ans] > 0 ? "" : "disabled"} onclick="app.store.tx(st=>txPass(st,'${ans}'))">Show me different ones (${s.passes[ans]} left)</button>` : ""}
+    </div></div>`;
+  }
+  if (s.phase === "answer") {
+    const q = QUESTIONS[s.q.chosen], ans = s.q.answerer, ask = other(ans);
+    return `<div class="overlay"><div class="sheet">
+      <div class="who">${q.both ? `<span class="tag p1">${esc(nameOf("p1"))}</span> & <span class="tag p2">${esc(nameOf("p2"))}</span> both answer` : `<span class="tag ${ask}">${esc(nameOf(ask))}</span> asks · <span class="tag ${ans}">${esc(nameOf(ans))}</span> answers`}</div>
+      <div class="bigq">${esc(q.text)}</div>
+      ${s.q.recycled !== undefined ? `<p class="tiny">♻️ Back in the pool: “${esc(QUESTIONS[s.q.recycled].text)}”<br>🗑 Tossed: “${esc(QUESTIONS[s.q.tossedQ].text)}”</p>` : ""}
+      <p class="tiny">Take your time. Phones down.</p>
+      <button class="wide" onclick="app.store.tx(txDone)">${s.levelClear ? "Done → finish the level" : "Done → back to the shelves"}</button></div></div>`;
+  }
+  if (s.phase === "levelDone") return `<div class="overlay"><div class="sheet center"><div class="logo">🎉</div><h2>Level ${s.level} cleared</h2>
+      <p class="sub">${s.matches} matches between you. Next up: <b>${LEVELS[s.level + 1].label}</b>.</p>
+      <button class="wide" onclick="app.store.tx(st=>txNextLevel(st,now()))">Continue</button></div></div>`;
+  if (s.phase === "finished") return `<div class="overlay"><div class="sheet center"><div class="logo">💛</div><h2>All shelves sorted</h2>
+      <p class="sub">${s.totalMatches} matches across three levels, ${s.turn} questions answered, ${s.tossed || 0} tossed. One last one, for both of you:</p>
+      <div class="bigq">${esc(FINAL_QUESTION)}</div>
+      <button class="wide ghostbtn" onclick="app.store.tx(st=>txRestart(st,now()))">Play again</button></div></div>`;
+  return "";
+}
+async function share() {
+  const link = roomLink(app.code);
+  if (navigator.share) { try { await navigator.share({ title: "MatchMaker", text: "Come sort shelves with me 🧺 Room " + app.code, url: link }); } catch (_) {} }
+  else copyLink();
+}
+async function copyLink() { try { await navigator.clipboard.writeText(roomLink(app.code)); toast("Link copied"); } catch (_) { prompt("Copy this link:", roomLink(app.code)); } }
+
+(async function boot() {
+  const code = roomFromURL();
+  if (window.FIREBASE_CONFIG && code) {
+    const remembered = localStorage.getItem("matchmaker:" + code);
+    if (remembered) { app.screen = "loading"; render(); try { await joinRoom(code, ""); } catch (e) { app.err = "Couldn't reconnect: " + e.message; app.screen = "join"; render(); } }
+    else { app.screen = "join"; render(); }
+  } else { app.screen = "home"; render(); }
+})();
+</script>
+</body>
+</html>
