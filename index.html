@@ -146,6 +146,8 @@ const LEVELS = {
 const BELT_PERIOD = 2800, BELT_WINDOW = 5;
 const PASSES_PER_LEVEL = 2, OPTIONS_PER_PICK = 3, DEFAULT_EVERY = 4;
 const BELT_BASE = 1000, CHUTE = 9999;
+// Bump this when shipping a change you want to be able to spot on a phone. Shown on the home screen.
+const VERSION = "3.1.0";
 // Display names. Used as-is in single-device mode, and pre-filled in the name boxes for two-phone mode (host = P1).
 const NAMES = { p1: "⚽ Mr. Soccerboy", p2: "🪑 Ms. Chairgirl" };
 
@@ -539,6 +541,13 @@ function render() {
   const cols = root.querySelectorAll(".col");
   if (cols.length) { const h = Math.max(cols[0].offsetHeight, cols[1].offsetHeight); const b = root.querySelector(".belt"); if (b) b.style.height = h + "px"; }
 }
+// "Sep 17, 2:22 PM" from the file's Last-Modified header — updates itself on every deploy,
+// so a stale phone shows an old stamp even if VERSION wasn't bumped. Falls back to VERSION alone.
+function buildStamp() {
+  const d = new Date(document.lastModified);
+  if (isNaN(d)) return "";
+  return d.toLocaleDateString([], { month: "short", day: "numeric" }) + ", " + d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
 function viewHome() {
   const online = !!window.FIREBASE_CONFIG;
   return `<div class="overlay" style="background:var(--bg)"><div class="sheet">
@@ -553,6 +562,7 @@ function viewHome() {
       <div class="notice">Two-phone mode is off because <b>config.js</b> has no Firebase config yet. See README for the 5-minute setup. On this device you can switch seats to play both sides.</div>
     `}
     <p class="tiny center" style="margin-top:16px">Tip: in Safari, Share → “Add to Home Screen” for full-screen play.</p>
+    <p class="tiny center" style="margin-top:6px;opacity:.75">v${VERSION}${buildStamp() ? " · updated " + buildStamp() : ""}</p>
   </div></div>`;
 }
 function viewNameForm(kind) {
