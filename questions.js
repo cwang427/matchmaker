@@ -5,9 +5,10 @@
 //   both  true = a "mutual" question you both answer (used sparingly, at most one per hand)
 //   text  the question itself
 //
-// Two batches, both sorted into tiers: your original 48 (minus one duplicate: #43 was a
-// reworded #12), then the 100 she collected, kept in her five sections. Move things
-// between tiers as you like — tier is the only thing the game reads.
+// Two batches, both sorted into tiers: your original 48 (minus two duplicates — #43 was a
+// reworded #12, and “experience life through another person’s eyes” was her “experience one
+// day of someone else’s life” in different words), then the 100 she collected, kept in her
+// five sections. Move things between tiers as you like — tier is the only thing the game reads.
 
 window.QUESTIONS = [
   // ---- Tier 1: warm-up (level 1) ----
@@ -49,7 +50,6 @@ window.QUESTIONS = [
   { tier: 2, text: "How do you define success?" },
   { tier: 2, text: "Is there a gift you’ve received that is particularly meaningful, valuable, or sentimental to you?" },
   { tier: 2, text: "Can you recall a moment when you felt proud of someone special to you?" },
-  { tier: 2, text: "If you could experience life through any other person’s eyes for a day, who would you choose and why?" },
 
   // ---- Tier 3: deepest (level 3) ----
   { tier: 3, text: "What is your most terrible memory?" },
