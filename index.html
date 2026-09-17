@@ -86,6 +86,8 @@
   button.small { padding: 8px 12px; font-size: 13px; border-radius: 10px; }
   button:disabled { opacity: .45; pointer-events: none; }
   button.wide { width: 100%; }
+  button.seat { background: var(--p1); box-shadow: 0 3px 0 #3a6ea8; }
+  button.seat.p2 { background: var(--p2); box-shadow: 0 3px 0 #b44a76; }
   .seg { display: flex; gap: 6px; margin: 8px 0 4px; }
   .seg button { flex: 1; padding: 10px 6px; font-size: 14px; }
   .seg button.off { background: #fff; color: var(--ink); box-shadow: 0 3px 0 #d8c8b2; }
@@ -147,7 +149,7 @@ const BELT_PERIOD = 2800, BELT_WINDOW = 5;
 const PASSES_PER_LEVEL = 2, OPTIONS_PER_PICK = 3, DEFAULT_EVERY = 4;
 const BELT_BASE = 1000, CHUTE = 9999;
 // Bump this when shipping a change you want to be able to spot on a phone. Shown on the home screen.
-const VERSION = "3.2.1";
+const VERSION = "3.3.0";
 // Display names. Used as-is in single-device mode, and pre-filled in the name boxes for two-phone mode (host = P1).
 const NAMES = { p1: "⚽ Mr. Soccerboy", p2: "🪑 Ms. Chairgirl" };
 
@@ -353,7 +355,7 @@ async function makeFirebaseStore(code) {
 }
 
 // ---------- App ----------
-const app = { draft: null, store: null, code: null, pid: null, state: null, clearedAnim: null, screen: "home", err: "", drag: null, needSheet: false, seenSend: 0, seenNeed: { p1: 0, p2: 0 } };
+const app = { draft: null, store: null, code: null, pid: null, state: null, clearedAnim: null, screen: "home", err: "", drag: null, needSheet: false, claim: null, forceClaim: false, seenSend: 0, seenNeed: { p1: 0, p2: 0 } };
 const now = () => Date.now() + (app.store ? app.store.timeOffset : 0);
 function roomFromURL() { return (new URLSearchParams(location.search).get("room") || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4); }
 function genCode() { const A = "ABCDEFGHJKLMNPQRSTUVWXYZ"; let c = ""; for (let i = 0; i < 4; i++) c += A[rand(A.length)]; return c; }
@@ -370,14 +372,28 @@ async function joinRoom(code, name) {
   app.store = await makeFirebaseStore(code);
   const first = await app.store.first();
   if (!first) { app.err = "That room doesn't exist (or has expired). Double-check the code."; app.screen = "join"; render(); return; }
-  const remembered = localStorage.getItem("matchmaker:" + code);
+  // ?room=CODE&seat=ask forces the picker, so a seat claimed by mistake can be handed back.
+  const remembered = app.forceClaim ? null : localStorage.getItem("matchmaker:" + code);
   if (remembered === "p1" || (remembered === "p2" && first.players.p2.name)) app.pid = remembered;
   else if (!first.players.p2.name) {
     const ok = await app.store.tx(s => txJoin(s, name));
     if (!ok) { app.err = "Someone already joined this room."; app.screen = "join"; render(); return; }
     app.pid = "p2"; localStorage.setItem("matchmaker:" + code, "p2");
-  } else { app.err = "This room already has two players."; app.screen = "join"; render(); return; }
+  } else {
+    // Both seats are named and this phone doesn't remember owning one — it cleared its storage,
+    // or it's a different phone. The room is private behind its code and there are only two of
+    // us, so let them take their seat back rather than locking them out of a live game.
+    app.claim = { code, p1: first.players.p1.name || NAMES.p1, p2: first.players.p2.name || NAMES.p2 };
+    app.err = ""; app.screen = "claim"; render(); return;
+  }
   app.code = code; history.replaceState(null, "", "?room=" + code); attach();
+}
+// Re-seeds the seat this phone forgot, then joins with the store joinRoom already opened.
+function claimSeat(pid) {
+  const code = app.claim.code;
+  localStorage.setItem("matchmaker:" + code, pid);
+  app.pid = pid; app.claim = null; app.forceClaim = false; app.code = code;
+  history.replaceState(null, "", "?room=" + code); attach();
 }
 function startDemo() {
   app.store = makeLocalStore(); app.pid = "p1"; app.code = "DEMO";
@@ -535,6 +551,7 @@ function render() {
   if (app.screen === "home") return root.innerHTML = viewHome();
   if (app.screen === "create") return root.innerHTML = viewNameForm("create");
   if (app.screen === "join") return root.innerHTML = viewNameForm("join");
+  if (app.screen === "claim") return root.innerHTML = viewClaim();
   if (app.screen === "loading") return root.innerHTML = `<div class="overlay"><div class="sheet center"><span class="spinner"></span> Connecting…</div></div>`;
   if (!app.state) return;
   root.innerHTML = viewHeader() + viewBanner() + viewBoard() + viewToolbar() + viewOverlay();
@@ -574,6 +591,17 @@ function viewNameForm(kind) {
     <input type="text" id="name" placeholder="Your name" maxlength="16" autocomplete="off" value="${esc(localStorage.getItem("matchmaker:name") || (kind === "create" ? NAMES.p1 : NAMES.p2))}">
     ${app.err ? `<div class="notice">${esc(app.err)}</div>` : ""}
     <div class="row"><button class="ghostbtn" onclick="app.err='';app.screen='home';render()">Back</button><button onclick="submitName('${kind}')">${kind === "create" ? "Create" : "Join"}</button></div>
+  </div></div>`;
+}
+function viewClaim() {
+  const c = app.claim;
+  return `<div class="overlay" style="background:var(--bg)"><div class="sheet">
+    <h2>Welcome back</h2>
+    <p class="sub">Room ${esc(c.code)} is still going, but this phone forgot which seat is yours. Which one are you?</p>
+    <button class="wide seat" onclick="claimSeat('p1')">${esc(c.p1)}</button><div style="height:10px"></div>
+    <button class="wide seat p2" onclick="claimSeat('p2')">${esc(c.p2)}</button>
+    <p class="tiny center" style="margin-top:14px">You'll land back on the board exactly where you left it.</p>
+    <div class="row"><button class="ghostbtn" onclick="app.claim=null;app.screen='home';render()">Back</button></div>
   </div></div>`;
 }
 async function submitName(kind) {
@@ -706,8 +734,9 @@ async function copyLink() { try { await navigator.clipboard.writeText(roomLink(a
 
 (async function boot() {
   const code = roomFromURL();
+  app.forceClaim = new URLSearchParams(location.search).get("seat") === "ask";
   if (window.FIREBASE_CONFIG && code) {
-    const remembered = localStorage.getItem("matchmaker:" + code);
+    const remembered = app.forceClaim ? null : localStorage.getItem("matchmaker:" + code);
     if (remembered) { app.screen = "loading"; render(); try { await joinRoom(code, ""); } catch (e) { app.err = "Couldn't reconnect: " + e.message; app.screen = "join"; render(); } }
     else { app.screen = "join"; render(); }
   } else { app.screen = "home"; render(); }
