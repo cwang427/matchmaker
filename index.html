@@ -105,7 +105,9 @@
   .qcard.picked { outline: 3px solid var(--ok); background: #e8f6ee; }
   .badge { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 800; padding: 3px 8px; border-radius: 999px; background: var(--ok); color: #fff; }
   .sheet a { color: var(--accent); font-weight: 700; }
-  .qcard .lbl { display:block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; font-weight: 700; }
+  .qcard .lbl { display:flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; font-weight: 700; }
+  .swap { flex: none; text-transform: none; letter-spacing: 0; font-size: 12.5px; font-weight: 700; color: var(--accent); background: #fff; border-radius: 999px; padding: 11px 13px; margin: -9px -7px -9px 0; box-shadow: 0 2px 0 #dcc6a3; white-space: nowrap; }
+  .swap:active { transform: translateY(2px); box-shadow: none; }
   .bigq { font-size: 22px; line-height: 1.35; font-weight: 700; margin: 12px 0 20px; }
   .who { display:flex; align-items:center; gap:8px; font-size: 14px; color: var(--muted); margin-bottom: 8px; flex-wrap: wrap; }
   .row { display: flex; gap: 10px; margin-top: 14px; } .row > * { flex: 1; }
@@ -149,7 +151,7 @@ const BELT_PERIOD = 2800, BELT_WINDOW = 5;
 const PASSES_PER_LEVEL = 2, OPTIONS_PER_PICK = 3, DEFAULT_EVERY = 4;
 const BELT_BASE = 1000, CHUTE = 9999;
 // Bump this when shipping a change you want to be able to spot on a phone. Shown on the home screen.
-const VERSION = "3.3.0";
+const VERSION = "3.4.0";
 // Display names. Used as-is in single-device mode, and pre-filled in the name boxes for two-phone mode (host = P1).
 const NAMES = { p1: "⚽ Mr. Soccerboy", p2: "🪑 Ms. Chairgirl" };
 
@@ -298,6 +300,21 @@ function txPick(state, pid, answer, recycle, toss) {
   return { ...state, phase: "answer", used, lastHand: opts.slice(), tossed: (state.tossed || 0) + 1,
     q: { ...state.q, chosen: answer, recycled: recycle, tossedQ: toss } };
 }
+// Swap one card out of the hand for a fresh one. The discarded question is spent for the rest of
+// the session, exactly like a toss, but this isn't rationed the way passes are — it's how a deck
+// you've played before stays interesting. Returns null (button does nothing) if nothing is left.
+function txSwapCard(state, pid, i) {
+  if (!state || state.phase !== "pick" || state.q.answerer !== pid) return null;
+  const opts = state.q.options || [];
+  if (!opts.includes(i)) return null;
+  const used = { ...(state.used || {}), ["q" + i]: true };
+  // draw with the card already spent and the rest of the hand cooling, so the replacement is new
+  const tmp = { ...state, used, lastHand: opts, q: { ...state.q, options: opts } };
+  const draw = drawOptions(tmp).find(x => !opts.includes(x) && !used["q" + x]);
+  if (draw === undefined) return null;
+  return { ...state, used, tossed: (state.tossed || 0) + 1,
+    q: { ...state.q, options: opts.map(x => x === i ? draw : x) } };
+}
 function txPass(state, pid) {
   if (!state || state.phase !== "pick" || state.q.answerer !== pid) return null;
   if ((state.passes || {})[pid] <= 0) return null;
@@ -412,6 +429,7 @@ function attach() {
       app.seenSend = s.lastSend.at;
       if (prev && s.lastSend.to === app.pid) toast(`${ITEMS[s.lastSend.item]} from ${nameOfState(s, s.lastSend.from)}`);
     }
+    if (s.phase === "pick" && (!prev || prev.phase !== "pick")) app.draft = null; // new hand, no stale pick
     const partner = other(app.pid);
     if (prev && s.need[partner] && s.need[partner] !== prev.need[partner]) toast(`${nameOfState(s, partner)} needs ${ITEMS[s.need[partner]]}`);
     app.state = s; app.screen = "game"; render();
@@ -534,15 +552,19 @@ function myPairs() {
   [...b.shelves.flat(), ...b.belt].forEach(t => { if (t) counts[t] = (counts[t] || 0) + 1; });
   return Object.keys(counts).filter(t => counts[t] === 2).map(Number);
 }
+// The pencilled-in answer, or null. Keyed on the card still being on the table rather than on the
+// whole hand, so swapping one of the others out doesn't wipe the choice. Cleared when a new hand
+// is dealt (see attach), so a stale pick can never carry into the next round.
+function draftAnswer() { const d = app.draft; return d && app.state.q.options.includes(d.answer) ? d.answer : null; }
 function draftTap(i) {
-  const s = app.state, hand = s.q.options.join(",");
-  const d = app.draft && app.draft.hand === hand ? app.draft : { hand, answer: null };
-  if (d.answer === null) { d.answer = i; app.draft = d; render(); return; }
-  if (i === d.answer) { app.draft = null; render(); return; } // tap the answer again to undo
-  const toss = s.q.options.find(x => x !== d.answer && x !== i);
+  const s = app.state, answer = draftAnswer();
+  if (answer === null) { app.draft = { answer: i }; render(); return; }
+  if (i === answer) { app.draft = null; render(); return; } // tap the answer again to undo
+  const toss = s.q.options.find(x => x !== answer && x !== i);
   app.draft = null;
-  app.store.tx(st => txPick(st, st.q.answerer, d.answer, i, toss));
+  app.store.tx(st => txPick(st, st.q.answerer, answer, i, toss));
 }
+function swapCard(ev, i) { ev.stopPropagation(); app.store.tx(st => txSwapCard(st, st.q.answerer, i)); }
 function switchSeat() { app.pid = other(app.pid); app.needSheet = false; render(); }
 
 // ---------- Rendering ----------
@@ -695,16 +717,19 @@ function viewOverlay() {
   }
   if (s.phase === "pick") {
     const ans = s.q.answerer, ask = other(ans), isMe = meId === ans;
-    const d = app.draft && app.draft.hand === s.q.options.join(",") ? app.draft : { hand: s.q.options.join(","), answer: null };
-    const badge = (i) => d.answer === i ? `<span class="badge ans">✅ Answer</span>` : "";
+    const answer = draftAnswer();
+    const badge = (i) => answer === i ? `<span class="badge ans">✅ Answer</span>` : "";
+    // a swap needs some unspent question that isn't already on the table
+    const canSwap = QUESTIONS.some((q, i) => !(s.used || {})["q" + i] && !s.q.options.includes(i));
+    const swap = (i) => isMe && canSwap ? `<span class="swap" onclick="swapCard(event,${i})">⟳ swap</span>` : "";
     const cards = s.q.options.map(i => { const q = QUESTIONS[i];
-      return `<button class="qcard ${q.both ? "both" : ""} ${d.answer === i ? "picked" : ""}" ${isMe ? `onclick="draftTap(${i})"` : "disabled"}><span class="lbl">${q.both ? "You both answer" : "Question"}</span>${esc(q.text)}${badge(i)}</button>`; }).join("");
-    const step = !isMe ? `${esc(nameOf(ans))} is choosing…` : (d.answer === null ? "Pick the one you'll answer" : "Which one comes back later?");
-    const sub = !isMe ? "" : (d.answer === null ? `<p class="sub">Then choose one to keep for later — the last one gets tossed for good.</p>` : `<p class="sub">The one you don't pick is tossed for the rest of tonight. <a href="#" onclick="app.draft=null;render();return false">Start over</a></p>`);
+      return `<button class="qcard ${q.both ? "both" : ""} ${answer === i ? "picked" : ""}" ${isMe ? `onclick="draftTap(${i})"` : "disabled"}><span class="lbl">${q.both ? "You both answer" : "Question"}${swap(i)}</span>${esc(q.text)}${badge(i)}</button>`; }).join("");
+    const step = !isMe ? `${esc(nameOf(ans))} is choosing…` : (answer === null ? "Pick the one you'll answer" : "Which one comes back later?");
+    const sub = !isMe ? "" : (answer === null ? `<p class="sub">Then choose one to keep for later — the last one gets tossed for good. <b>⟳ swap</b> drops a question for tonight and deals another.</p>` : `<p class="sub">The one you don't pick is tossed for the rest of tonight. <a href="#" onclick="app.draft=null;render();return false">Start over</a></p>`);
     return `<div class="overlay"><div class="sheet">
       <div class="who">✨ ${s.matches} matches! <span class="tag ${ans}">${esc(nameOf(ans))}</span> answers · <span class="tag ${ask}">${esc(nameOf(ask))}</span> asks</div>
       <h2>${step}</h2>${sub}${cards}
-      ${isMe && d.answer === null ? `<button class="ghostbtn small wide" style="margin-top:8px" ${s.passes[ans] > 0 ? "" : "disabled"} onclick="app.store.tx(st=>txPass(st,'${ans}'))">Show me different ones (${s.passes[ans]} left)</button>` : ""}
+      ${isMe && answer === null ? `<button class="ghostbtn small wide" style="margin-top:8px" ${s.passes[ans] > 0 ? "" : "disabled"} onclick="app.store.tx(st=>txPass(st,'${ans}'))">Show me different ones (${s.passes[ans]} left)</button>` : ""}
     </div></div>`;
   }
   if (s.phase === "answer") {
