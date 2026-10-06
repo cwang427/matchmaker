@@ -47,6 +47,23 @@ Any static host works. Easiest:
 
 If either phone loses signal or the screen locks, just reopen the link — the room remembers which seat you had and the board is right where you left it.
 
+### Picking up a game days later
+
+Rooms don't expire. The board lives in Firebase under `rooms/CODE` and nothing in the app or the
+rules ever deletes it, so you can stop mid-game, close both phones, and reopen the link a week
+later to exactly the state you left — including which questions are already spent.
+
+The fragile part isn't the room, it's the seat. Each phone remembers which player it is in
+`localStorage` under `matchmaker:CODE`. If that entry disappears — Safari clears script storage for
+sites you haven't opened in a while, and clearing website data or switching phones does it too —
+the app can't tell which of you is reconnecting. When that happens you get a **Welcome back** screen
+with both names on it: tap yours and you're back on the board. (Adding the game to your Home Screen
+makes the storage much stickier than a plain Safari tab, which is the real reason to do it.)
+
+Tapped the wrong name? That seat is now remembered silently. Open
+**`?room=CODE&seat=ask`** — the extra `&seat=ask` forces the picker even when a seat is already
+remembered, and claiming one rewrites the URL back to normal.
+
 ## How it plays
 
 - **Each of you has your own board** (shelves on the sides, a conveyor belt down the middle) on your own phone. Drag an item from the belt or a shelf onto an empty shelf spot, or tap it then tap the spot. Three of a kind on one shelf clears it.
@@ -61,6 +78,6 @@ If either phone loses signal or the screen locks, just reopen the link — the r
 
 ## Editing questions
 
-`questions.js` is a plain list. Each entry has a `tier` (1–3) and `text`; add `both: true` for a question you both answer. With 'every 3' you'll see up to ~15 questions per game, so ~10+ per tier is comfortable (more is better, since passes burn through them). Tiers fall back to lower tiers if a deck runs dry.
+`questions.js` is a plain list. Each entry has a `tier` (1–3) and `text`; add `both: true` for a question you both answer. Add new ones at the end rather than inserting them mid-list, and be careful about deleting: a room tracks which questions are spent by their **position** in this array, so removing an entry renumbers everything after it and an in-progress room will have the wrong ones marked as used. Edit the deck between games, not during one. With 'every 3' you'll see up to ~15 questions per game, so ~10+ per tier is comfortable (more is better, since passes burn through them). Tiers fall back to lower tiers if a deck runs dry.
 
 To change the item icons, edit the `ITEMS` list near the top of `index.html` (any emoji works). To change level sizes (`typesPer` = item types each player owns; total matches per level = 2 × typesPer) or how many items start on the belt, edit `LEVELS` right below it; `BELT_PERIOD` sets the belt speed (ms per notch).
